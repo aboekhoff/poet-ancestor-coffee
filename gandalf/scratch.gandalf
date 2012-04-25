@@ -1,0 +1,123 @@
+(prn [1 2 3 4])
+(prn 'foo)
+(prn '(a b [c d 42 (21)]))
+(define* sqr (fn* (x) (* x x)))
+(define* ls '(1 2 3 4 5 6 7 8 9 10))
+(prn ls)
+(prn (map sqr ls))
+(prn (map sqr [1 2 3 4 5]))
+(println (map sqr [1 2 3 4 5]))
+(define* wtf (map sqr [1 2 3 4 5]))
+(prn wtf)
+(prn "WTF")
+
+(prn 1 2)
+(prn 1)
+(prn (list 1 2 3))
+
+(prn (concat [1 2 3] '(foo bar [zonk]) '(grim [fandango])))
+
+
+(let ((x 0))
+  (loop
+   (if (> x 10)
+       (do (println "done")
+           (return-from #nil))
+       (do (prn x)
+           (set! x (+ x 1))))))
+
+(define* macro:capture #nil)
+(define* macro:compare #nil)
+
+(define-macro* cond
+  (fn* (x _ _)
+       (let ((clauses (rest x)))
+         (if (empty? clauses)
+             #nil
+             (let ((clause  (first clauses))
+                   (clauses (rest clauses)))
+               `(if ,(first clause)
+                    (do ,@(rest clause))
+                    (cond ,@clauses)))))))
+
+(prn
+ (cond (#f    1)
+       (#nil  2)
+       (#void 3)
+       (""    4)
+       (0     5)))
+
+(define-macro* or
+  (fn* (x _ _)
+       (let ((clauses (rest x)))
+         (cond
+          ((empty? clauses) #f)
+          ((empty? (rest clauses)) (first clauses))
+          (#t `(let ((x ,(first clauses)))
+                 (if x x (or ,@(rest clauses)))))))))
+
+(define-macro* and
+  (fn* (x _ _)
+       (let ((clauses (rest x)))
+         (cond
+          ((empty? clauses) #t)
+          ((empty? (rest clauses))
+           (first clauses))
+          (#t `(let ((x ,(first clauses)))
+                 (if x (and ,@(rest clauses)) x)))))))
+
+(define-macro* when
+  (fn* (x _ _)
+       (let ((clauses (rest x)))
+         `(if ,(first clauses)
+              (do ,@(rest clauses))
+              #nil))))
+
+(define-macro* unless
+  (fn* (x _ _)
+       (let ((clauses (rest x)))
+         `(if ,(first clauses)
+              #nil
+              (do ,@(rest clauses))))))
+
+(prn (or))
+(prn (or #f))
+(prn (or #f #t))
+(prn (or "" 0 #nil 'woot!))
+
+(prn (and))
+(prn (and #f))
+(prn (and #f #t))
+(prn (and "" 0 #t))
+
+(when #t   (prn "what") (prn "what"))
+(unless #f (prn "woot") (prn "woot!"))
+
+(define* find
+  (fn* (pred xs)
+       (block ok
+              (let ((succeed (fn* (x) (return-from ok x))))
+                (map (fn* (x) (when (pred x) (succeed x))) xs)))))
+
+(define* even? (fn* (x) (eq? 0 (mod x 2))))
+(define* nums '(1 3 5 7 9 11 14 17 18))
+
+(prn nums)
+(prn (find even? nums))
+
+(define-macro* time
+  (fn* (x i c)
+       `(do (prn (quote ,(first (rest x))))
+            (let ((then ((. (new (. js 'Date)) 'getTime))))
+              ,(first (rest x))
+              (let ((now ((. (new (. js 'Date)) 'getTime))))
+                (println (- now then) "ms"))))))
+
+(prn (macroexpand '(time (prn "foo" "bar" "baz"))))
+
+(prn (partition 2 '(a b c d e f g h)))
+(prn (partition 3 '(a b c d e f g h i)))
+
+(prn (foldl + '(1 2 3 4 5)))
+(prn (foldl + 1 '(2 3 4 5)))
+(prn (foldl cons 1 '((1) (2) (3))))

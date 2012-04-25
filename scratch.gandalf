@@ -1,0 +1,13 @@
+(set! *echo* #t)
+(set! *echo:sexp* #t)
+(set! *echo:expand* #t)
+
+(define* make-generator
+  (fn* (seed)
+       (fn* () (set! seed (+ seed 1)))))
+
+(define* next-generic-id (make-generator 0))
+(define* +nil-class+ (Object))
+(define* +void-class+ (Object))
+
+

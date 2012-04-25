@@ -1,0 +1,7 @@
+{
+    "author"  : "Andrew Boekhoff <boekhoffa@gmail.com>",
+    "name"    : "gandalf",
+    "version" : "0.0.1",
+    "bin"     : { "gandalf" : "./lib/gandalf.js" },
+    "engines" : { "node" : "*" }
+}

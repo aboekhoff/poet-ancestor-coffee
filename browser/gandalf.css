@@ -1,0 +1,22 @@
+.CodeMirror {
+    font-family: Monaco;
+    font-size: 1em;
+    float: left;
+    width: 50%;
+}
+
+div.Terminal {
+    font-family: Monaco;
+    font-size: 1em;
+    float: right;
+    width: 50%;
+    background: #090909;
+    color: #CCC;
+    padding: 0;
+    text-align: left;
+    margin: 0;
+}
+
+div.Terminal p {
+    margin: 0 0 0 0;
+}
