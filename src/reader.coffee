@@ -118,11 +118,17 @@ class Reader
       @skipWhitespace()
       @peekChar() == Reader.EOF
 
+    @dottedRegex: /^[^\.]+(\.[^\.]+)+/
+
     @parseAtom: (s) ->
-        if s[0] == ':'
-            Keyword.create(s.substring(1))
-        else
-            new Symbol(s)
+      if Reader.dottedRegex.test(s)
+        segs = s.split(".")
+        root = new Symbol(segs[0])
+        for seg in segs.slice(1)
+          root = List.create(baseSymbol('.'), root, seg)
+        root
+      else
+        new Symbol(s)
 
     @isBinary: (s) -> /(\+|-)?0[bB](0|1)+$/.test(s)
     @isOctal:  (s) -> /(\+|-)?0[0-7]+$/.test(s)

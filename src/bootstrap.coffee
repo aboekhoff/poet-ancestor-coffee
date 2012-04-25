@@ -147,6 +147,11 @@ bootstrap(baseNS, {
     "concat"      : concat
     "partition"   : partition
     "foldl"       : foldl
+    "take"        : take
+    "drop"        : drop
+    "take-while"  : takeWhile
+    "drop-while"  : dropWhile
+    "apply"       : apply
 
     "represent"   : represent
     "pr"          : pr
@@ -163,7 +168,10 @@ bootstrap(baseNS, {
     "process"     : if typeof process != 'undefined' then process else undefined
     "js"          : if typeof global  != 'undefined' then global else window
 
-    "macroexpand": (x) -> expand($PACKAGE().env, x)
+    "macroexpand" : (x) -> macroexpand($PACKAGE().env, x)
+    "expand"      : (x) -> expand($PACKAGE().env, x)
+    "eval"        : () ->
+    "load"        : () ->
 
     "*echo*"           : false
     "*echo:expand*"    : false

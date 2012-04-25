@@ -350,8 +350,11 @@ represent.extend(
 
   Method.DEFAULT
   (x, p, _) ->
-    name = x.constructor.name || "Object"
-    str  = if x.toString != Object.prototype.toString then ' ' + x else ''
+    constructor = x.constructor
+    if constructor then name = constructor.name
+    name = if name then name else "Object"
+    str  = if x.toString &&
+              x.toString != Object.prototype.toString then ' ' + x else ''
     p("#<" + name + str + ">")
 
 )
@@ -467,6 +470,9 @@ fromArray = (type, array) ->
 
 isEmpty = Method(name: 'empty?')
 isEmpty.extend(
+  undefined
+  () -> true
+
   null
   () -> true
 
@@ -607,6 +613,62 @@ rest.extend(
 
   Method.DEFAULT
   (x) -> List.fromArray(toArray(x)).tail
+)
+
+take = Method(name: 'take', index: 1)
+take.extend(
+  null
+  (_) -> null
+
+  String
+  (n, s) -> s.substring(0, n)
+
+  Array
+  (n, xs) -> x.slice(0, n)
+
+  List
+  (n, xs) -> List.fromArray(List.toArray(xs).slice(0, n))
+)
+
+drop = Method(name: 'drop', index: 1)
+drop.extend(
+  null
+  (_) -> null
+
+  String
+  (n, s) -> s.substring(n)
+
+  Array
+  (n, xs) -> x.slice(n)
+
+  List
+  (n, xs) -> List.fromArray(List.toArray(xs).slice(n))
+)
+
+takeWhile = Method({name: 'take-while', index: 1})
+takeWhile.extend(
+  Method.DEFAULT
+  (pred, xs) ->
+    res  = []
+    for x in toArray(xs)
+      if pred(x)
+        res.push(x)
+      else
+        break
+    res
+)
+
+dropWhile = Method({name: 'drop-while', index: 1})
+dropWhile.extend(
+  Method.DEFAULT
+  (pred, xs) ->
+    xs = toArray(xs)
+    for x, i in xs
+      if pred(x)
+        null
+      else
+        return xs.slice(i)
+    return []
 )
 
 get = Method(name: 'get')

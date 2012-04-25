@@ -102,7 +102,7 @@ class Macro
     constructor: (@transformer) ->
 
     @create: (definingEnv, transformer) ->
-        console.log(transformer.toString())
+        #console.log(transformer.toString())
         _transformer = (callingEnv, input) ->
             tag = new Tag(definingEnv)
 
@@ -413,9 +413,20 @@ expandQuasiquote = (e, x) ->
 
   q(x)
 
+isFrontDotted = (x) ->
+  x instanceof Symbol && /^\.[^\.]+$/.test(x.name)
+
 expandCall = (e, ls) ->
-  ex = (x) -> expand(e, x)
-  map(ex, ls)
+  head = first(ls)
+  if isFrontDotted(head)
+    method = head.name.substring(1)
+    _ls    = List.create(baseSymbol("."), ls.tail.head, method)
+    _ls    = cons(_ls, ls.tail.tail)
+    prn(_ls)
+    expand(e, _ls)
+  else
+    ex = (x) -> expand(e, x)
+    map(ex, ls)
 
 flattenBody = (e, xs) ->
     result = []

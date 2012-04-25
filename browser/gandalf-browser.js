@@ -1,6 +1,6 @@
 (function() {
 
-var $COMPILER_MACROS, $OUT, $PACKAGE, $RUNTIME, List, Map, Method, RT, Set, Symbol, Tag, Var, apply, baseNS, baseSymbol, concat, cons, contains, first, foldl, forEach, fromArray, get, isEmpty, map, newline, partition, pr, print, println, prn, put, raise, represent, representArray, rest, size, toArray, toType, toTypeName, toUID, _cat;
+var $COMPILER_MACROS, $OUT, $PACKAGE, $RUNTIME, List, Map, Method, RT, Set, Symbol, Tag, Var, apply, baseNS, baseSymbol, concat, cons, contains, drop, dropWhile, first, foldl, forEach, fromArray, get, isEmpty, map, newline, partition, pr, print, println, prn, put, raise, represent, representArray, rest, size, take, takeWhile, toArray, toType, toTypeName, toUID, _cat;
 RT = {};
 baseNS = "gandalf";
 baseSymbol = function(name) {
@@ -446,9 +446,13 @@ represent.extend(null, function(_, p, _) {
   name = name ? ':' + name : '';
   return p("#<Function" + name + ">");
 }, Method.DEFAULT, function(x, p, _) {
-  var name, str;
-  name = x.constructor.name || "Object";
-  str = x.toString !== Object.prototype.toString ? ' ' + x : '';
+  var constructor, name, str;
+  constructor = x.constructor;
+  if (constructor) {
+    name = constructor.name;
+  }
+  name = name ? name : "Object";
+  str = x.toString && x.toString !== Object.prototype.toString ? ' ' + x : '';
   return p("#<" + name + str + ">");
 });
 representArray = function(xs, p, m) {
@@ -557,7 +561,9 @@ fromArray = function(type, array) {
 isEmpty = Method({
   name: 'empty?'
 });
-isEmpty.extend(null, function() {
+isEmpty.extend(void 0, function() {
+  return true;
+}, null, function() {
   return true;
 }, String, function(s) {
   return s.length === 0;
@@ -685,6 +691,67 @@ rest.extend(null, function(_) {
   return x.tail;
 }, Method.DEFAULT, function(x) {
   return List.fromArray(toArray(x)).tail;
+});
+take = Method({
+  name: 'take',
+  index: 1
+});
+take.extend(null, function(_) {
+  return null;
+}, String, function(n, s) {
+  return s.substring(0, n);
+}, Array, function(n, xs) {
+  return x.slice(0, n);
+}, List, function(n, xs) {
+  return List.fromArray(List.toArray(xs).slice(0, n));
+});
+drop = Method({
+  name: 'drop',
+  index: 1
+});
+drop.extend(null, function(_) {
+  return null;
+}, String, function(n, s) {
+  return s.substring(n);
+}, Array, function(n, xs) {
+  return x.slice(n);
+}, List, function(n, xs) {
+  return List.fromArray(List.toArray(xs).slice(n));
+});
+takeWhile = Method({
+  name: 'take-while',
+  index: 1
+});
+takeWhile.extend(Method.DEFAULT, function(pred, xs) {
+  var res, x, _i, _len, _ref;
+  res = [];
+  _ref = toArray(xs);
+  for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+    x = _ref[_i];
+    if (pred(x)) {
+      res.push(x);
+    } else {
+      break;
+    }
+  }
+  return res;
+});
+dropWhile = Method({
+  name: 'drop-while',
+  index: 1
+});
+dropWhile.extend(Method.DEFAULT, function(pred, xs) {
+  var i, x, _len;
+  xs = toArray(xs);
+  for (i = 0, _len = xs.length; i < _len; i++) {
+    x = xs[i];
+    if (pred(x)) {
+      null;
+    } else {
+      return xs.slice(i);
+    }
+  }
+  return [];
 });
 get = Method({
   name: 'get'
@@ -982,9 +1049,18 @@ Reader = (function() {
     this.skipWhitespace();
     return this.peekChar() === Reader.EOF;
   };
+  Reader.dottedRegex = /^[^\.]+(\.[^\.]+)+/;
   Reader.parseAtom = function(s) {
-    if (s[0] === ':') {
-      return Keyword.create(s.substring(1));
+    var root, seg, segs, _i, _len, _ref;
+    if (Reader.dottedRegex.test(s)) {
+      segs = s.split(".");
+      root = new Symbol(segs[0]);
+      _ref = segs.slice(1);
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        seg = _ref[_i];
+        root = List.create(baseSymbol('.'), root, seg);
+      }
+      return root;
     } else {
       return new Symbol(s);
     }
@@ -1178,7 +1254,7 @@ Reader = (function() {
   return Reader;
 })();
 
-var Env, Macro, Package, SpecialForm, collectDefines, expand, expandArray, expandBody, expandCall, expandLetRec, expandList, expandMap, expandQuasiquote, expandSymbol, flattenBody, isSpecialFormCall, macroexpand, macroexpand1;
+var Env, Macro, Package, SpecialForm, collectDefines, expand, expandArray, expandBody, expandCall, expandLetRec, expandList, expandMap, expandQuasiquote, expandSymbol, flattenBody, isFrontDotted, isSpecialFormCall, macroexpand, macroexpand1;
 Env = (function() {
   function Env(vars, labels) {
     this.vars = vars;
@@ -1313,7 +1389,6 @@ Macro = (function() {
   }
   Macro.create = function(definingEnv, transformer) {
     var _transformer;
-    console.log(transformer.toString());
     _transformer = function(callingEnv, input) {
       var capture, compare, output, sanitize, tag;
       tag = new Tag(definingEnv);
@@ -1618,12 +1693,24 @@ expandQuasiquote = function(e, x) {
   };
   return q(x);
 };
+isFrontDotted = function(x) {
+  return x instanceof Symbol && /^\.[^\.]+$/.test(x.name);
+};
 expandCall = function(e, ls) {
-  var ex;
-  ex = function(x) {
-    return expand(e, x);
-  };
-  return map(ex, ls);
+  var ex, head, method, _ls;
+  head = first(ls);
+  if (isFrontDotted(head)) {
+    method = head.name.substring(1);
+    _ls = List.create(baseSymbol("."), ls.tail.head, method);
+    _ls = cons(_ls, ls.tail.tail);
+    prn(_ls);
+    return expand(e, _ls);
+  } else {
+    ex = function(x) {
+      return expand(e, x);
+    };
+    return map(ex, ls);
+  }
 };
 flattenBody = function(e, xs) {
   var result, x, _results;
@@ -2614,6 +2701,11 @@ bootstrap(baseNS, {
   "concat": concat,
   "partition": partition,
   "foldl": foldl,
+  "take": take,
+  "drop": drop,
+  "take-while": takeWhile,
+  "drop-while": dropWhile,
+  "apply": apply,
   "represent": represent,
   "pr": pr,
   "prn": prn,
@@ -2627,8 +2719,13 @@ bootstrap(baseNS, {
   "process": typeof process !== 'undefined' ? process : void 0,
   "js": typeof global !== 'undefined' ? global : window,
   "macroexpand": function(x) {
+    return macroexpand($PACKAGE().env, x);
+  },
+  "expand": function(x) {
     return expand($PACKAGE().env, x);
   },
+  "eval": function() {},
+  "load": function() {},
   "*echo*": false,
   "*echo:expand*": false,
   "*echo:normalize*": false,
@@ -2656,7 +2753,7 @@ $echo_sexp = Var('*echo:sexp*', f);
 $echo_expand = Var('*echo:expand*', f);
 $echo_normalize = Var('*echo:normalize*', f);
 $echo_compile = Var('*echo:compile*', f);
-$echo_emit = Var('*echo:emit*', f);
+$echo_emit = Var('*echo:emit*', t);
 $echo_eval = Var('*echo:eval*', f);
 ev = function(src) {
   var func;
@@ -2701,8 +2798,9 @@ loadToplevel = function(reader) {
   result = null;
   expand1 = function(sexp) {
     var transformer, _sexp;
+    sexp = macroexpand(env, sexp);
     if (isSpecialFormCall(env, sexp, "do")) {
-      return sexps = sexp.tail.toArray().concat(sexps);
+      return sexps = concat(sexp.tail, sexps);
     } else if (isSpecialFormCall(env, sexp, "import")) {
       return raise('not implemented');
     } else if (isSpecialFormCall(env, sexp, "include")) {

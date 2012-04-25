@@ -6,7 +6,7 @@ $echo_sexp      = Var('*echo:sexp*', f)
 $echo_expand    = Var('*echo:expand*', f)
 $echo_normalize = Var('*echo:normalize*', f)
 $echo_compile   = Var('*echo:compile*', f)
-$echo_emit      = Var('*echo:emit*', f)
+$echo_emit      = Var('*echo:emit*', t)
 $echo_eval      = Var('*echo:eval*', f)
 
 ev = (src) ->
@@ -42,8 +42,10 @@ loadToplevel = (reader) ->
   result  = null
 
   expand1 = (sexp) ->
+    sexp = macroexpand(env, sexp)
+
     if isSpecialFormCall(env, sexp, "do")
-      sexps = sexp.tail.toArray().concat(sexps)
+      sexps = concat(sexp.tail, sexps)
 
     else if isSpecialFormCall(env, sexp, "import")
       raise('not implemented')
