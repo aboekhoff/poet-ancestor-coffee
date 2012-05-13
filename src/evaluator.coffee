@@ -6,7 +6,7 @@ $echo_sexp      = Var('*echo:sexp*', f)
 $echo_expand    = Var('*echo:expand*', f)
 $echo_normalize = Var('*echo:normalize*', f)
 $echo_compile   = Var('*echo:compile*', f)
-$echo_emit      = Var('*echo:emit*', t)
+$echo_emit      = Var('*echo:emit*', f)
 $echo_eval      = Var('*echo:eval*', f)
 
 ev = (src) ->

@@ -1,0 +1,338 @@
+(define-macro* cond
+  (fn* (x _ _)
+       (let* ((clauses (rest x)))
+         (if (empty? clauses)
+             #nil
+             (let* ((clause  (first clauses))
+                   (clauses (rest clauses)))
+               `(if ,(first clause)
+                    (do ,@(rest clause))
+                    (cond ,@clauses)))))))
+
+(define-macro* or
+  (fn* (x _ _)
+       (let* ((clauses (rest x)))
+         (cond
+          ((empty? clauses) #f)
+          ((empty? (rest clauses)) (first clauses))
+          (#t `(let* ((x ,(first clauses)))
+                 (if x x (or ,@(rest clauses)))))))))
+
+(define-macro* and
+  (fn* (x _ _)
+       (let* ((clauses (rest x))) 
+         (cond
+          ((empty? clauses) #t)
+          ((empty? (rest clauses))
+           (first clauses))
+          (#t `(let* ((x ,(first clauses)))
+                 (if x (and ,@(rest clauses)) x)))))))
+
+(define-macro* when
+  (fn* (x _ _)
+       (let* ((clauses (rest x)))
+         `(if ,(first clauses)
+              (do ,@(rest clauses))
+              #nil))))
+
+(define-macro* unless
+  (fn* (x _ _)
+       (let* ((clauses (rest x))) 
+         `(if ,(first clauses)
+              #nil
+              (do ,@(rest clauses))))))
+
+(define-macro* return
+  (fn* (x _ _)
+       `(return-from #nil
+                     ,(if (empty? (rest x))
+                          #nil
+                          (first (rest x))))))
+
+(define-macro* inc!
+  (fn* (x _ _)
+       `(set! ,(first (rest x))
+              (+ ,(first (rest x)) 1))))
+
+(define-macro* dec!
+  (fn* (x _ _)
+       `(set! ,(first (rest x))
+              (- ,(first (rest x)) 1))))
+
+(define* not (fn* (x) (if x #f #t)))
+
+(define* rest-sentinel?
+  (fn* (x) (and (symbol? x) (eq? x.name ":"))))
+
+(define* not-rest-sentinel?
+  (fn* (x) (not (rest-sentinel? x))))
+
+(define* parse-arglist
+  (fn* (arglist)
+       (let* [[pargs (take-while not-rest-sentinel? arglist)]
+              [rem   (drop-while not-rest-sentinel? arglist)]]
+         [pargs (first (rest rem))])))
+
+(define-macro* fn
+  (fn* (x i c)
+       `(fn* ,@(rest x))))
+
+(define-macro* define
+  (fn* (x i c)
+       (let* ([x (rest x)])
+        (if (list? (first x))
+          (let* [[name (first (first x))]
+                 [args (rest  (first x))]
+                 [body (rest x)]]
+                `(define* ,name (fn ,args (block ,name ,@body))))
+          `(define* ,(first x) ,(first (rest x)))))))
+
+(define-macro* define-macro
+  (fn* (x _ _)
+       (let* [[x    (rest x)]
+              [name (first (first x))]
+              [args (rest  (first x))]
+              [body (rest x)]]
+             `(define-macro* ,name
+                (let* [[transformer (fn* (,@args) ,@body)]]
+                      (fn* (x _ _) (apply transformer (rest x))))))))
+
+(define-macro (comment) #nil)
+
+(define (make-generator seed)
+  (fn* () (set! seed (+ seed 1))))
+
+(define next-gensym-id
+  (make-generator 0))
+
+(define (gensym prefix)
+  (let* [[id (next-gensym-id)]
+         [prefix (or prefix "")]]
+    (new Symbol (+ prefix "__G__" id))))
+
+(define (as-array* x)
+  (if (array? x)      
+      x
+      `(let* ([tmp ,x])
+         (if (array-like? tmp)
+             tmp
+             (to-array tmp)))))
+
+(define (destructure x y)
+  (cond
+   ((symbol? x)
+    [[x y]])  
+   
+   ((array? x)
+    (destructure-array x y))
+
+   ((list? x)
+    (destructure-list x y))))
+
+(define (destructure-array x y)
+  (let* ([y* (gensym "array")])
+      `[[,y* ,(as-array* y)] ,@(destructure-array* x y*)]))
+
+(define (destructure-array* x y)
+  (let* [[tmp     (parse-arglist x)]
+         [ppats   tmp.0]
+         [restpat tmp.1]]
+        `[,@(destructure-indices y ppats 0)
+          ,@(when restpat
+              (destructure restpat `(slice* ,y ,(size ppats))
+                           (gen-slice array (size ppats))))]))
+
+(define (destructure-indices obj pats idx)
+  (if (empty? pats)
+    '()    
+    (concat
+     (destructure (first pats) `(. ,obj ,idx))
+     (destructure-indices obj (rest pats) (+ idx 1)))))
+
+(define-macro* slice*
+  (fn (x i c)
+      (gen-slice (second x) (third x))))
+
+(define (gen-slice arr start)
+  `(let* ([slice []]
+          [i ,start]
+          [j 0]
+          [end (. ,arr "length")])
+     (set! slice.length (- end ,start))
+     (loop
+      (if (< i end)
+          (do (set! (. slice j) (. ,arr i))
+              (inc! i)
+              (inc! j))
+          (return slice)))))
+
+(define (process-bindings bindings)
+  (apply concat
+         (map (fn* (pair) (destructure (first pair) (second pair)))
+              bindings)))
+
+(define-macro* let
+  (fn* (x i c)
+       `(let* ,(process-bindings (second x))
+          ,@(rest (rest x)))))
+
+(define-macro* js:args
+  (fn* (x i c)
+       `(js* "arguments")))
+
+(define-macro* js:arglen
+  (fn* (x i c)
+       `(. (js* "arguments") "length")))
+
+(define (destructure-arglist arglist body)
+  (define (f arg)
+    (if (symbol? arg)
+        arg
+        (let* ([tmp (gensym)])
+          (set! body `(let ((,arg ,tmp)) ,body))
+          tmp)))
+  [(map f arglist) body])
+
+(define (fn-builder args body)
+  (let (([pargs restarg] (parse-arglist args))
+        ([pargs body]    (destructure-arglist pargs body))
+        (arity           (size pargs))
+        (arity-checker   (if restarg '>= 'eq?))        
+        (arity-check     `(,arity-checker (js:arglen) ,arity))
+        (message
+         (+ "expected " arity (if restarg " or more " " ") "args but got "))
+         
+        (body
+         (if restarg
+             `(let ((,restarg (slice* (js:args) ,arity))) ,body)
+             body))
+
+        (body
+         `(if ,arity-check
+              ,body 
+              (throw (js.Error (+ ,message (js:arglen)))))))
+     
+    `(fn* (,@pargs) ,body)))
+
+(define-macro* fn
+  (fn* (x i c)
+       (fn-builder (second x) `(do ,@(drop 2 x)))))
+
+(define-macro* define-macro
+  (fn ([_ [name : args] : body] inject compare)
+      `(define-macro* ,name
+         (let ((transformer (fn (,@args) ,@body)))
+           (fn* (x _ _)
+                (apply transformer (rest x)))))))
+
+(define-macro (define-once name expr)
+  `(when (eq? ,name #void)
+         (set! ,name ,expr)))
+
+(define-macro (js:this : [field])
+  (if (> (js:arglen) 0)
+      `(. (js* "this") ,field)
+      `(js* "this")))
+
+;; quck and dirty pattern matcher
+;; should make the compiler/emitter
+;; muuuuch more pleasant to write
+
+(define (kwote? x)
+  (when (list? x)
+        (let ((s (first x)))
+          (and (eq? x.ns "gandalf")
+               (eq? x.name "quote")))))
+
+(define (ignore? x)
+  (and (symbol? x) (eq? x.name "_")))
+
+(define (build-match target cases)
+  (let ((ok-label (gensym "match")))
+    `(let ((target* ,target))
+       (block ,ok-label ,(build-match-1 cases target ok-label)))))
+
+(define (build-match-1 cases target ok-label)
+  (if (empty? cases)
+      `(throw (js.Error "match failure"))
+      (let (([[case : body] : more-cases] cases)
+            (succeed (fn () `(return-from ,ok-label (do ,@body))))
+            (fail-label (gensym "pattern"))
+            (fail       `(return-from ,fail-label)))
+        `(do (block ,fail-label ,(build-match-2 case target succeed fail))
+             ,(build-match-1 more-cases target ok-label)))))
+
+(define (build-match-2 p x succeed fail)
+  (cond
+   ((ignore? p)
+    (succeed))
+   
+   ((symbol? p)
+    `(let* ((,p ,x)) ,(succeed)))
+
+   ((array? p)
+    `(if (and (array? ,x) (eq? (. ,x "length") ,(. p "length")))
+         ,(build-indexed-matches p x succeed fail 0)
+         ,fail))
+
+   ((list? p)
+    (build-list-match p x succeed fail))
+   
+   (#t
+    `(if (eq? ,p ,x) ,(succeed) ,fail))))
+
+(define (build-indexed-matches ps x succeed fail i)
+  (if (empty? ps)
+      (succeed)
+      (let (([p : ps] ps)
+            (succeed*
+             (fn () (build-indexed-matches ps x succeed fail (+ i 1)))))
+        (build-match-2 p `(. ,x ,i) succeed* fail))))
+
+(define (symbol-eq? sym name : [ns])
+  (let ((ns (or ns #nil)))
+    (and (symbol? sym)
+         (eq? sym.name name)
+         (eq? sym.ns   ns))))
+
+(define (build-list-match p x succeed fail)
+  (let (([head : tail] p))
+    (cond
+     ((symbol-eq? head "as:")
+      `(let ((,(second p) ,x))
+         ,(build-match-1 (third p) x succeed fail)))
+     
+     ((symbol-eq? head "?")
+      (let ((pred (second p))
+            (pat* (third p))
+            (succeed*
+             (if pat*
+                 (fn () (build-match-2 pat* x succeed fail))
+                 succeed)))
+        `(if (,pred ,x) ,(succeed*) ,fail)))
+
+     ((symbol-eq? head "unquote" "gandalf")
+      `(if (eq? ,(second p) ,x)
+           ,(succeed)
+           ,fail))
+     
+     (#t
+      (throw (js.Error "invalid list pattern in match case"))))))
+
+(define-macro (match target : cases)
+  (build-match target cases))
+
+;; types
+
+(define-macro (make-class fields)
+  `(let ()
+     (define* class
+       (fn* (,@fields)
+            (if (instance? (js:this) class)
+                (do ,@(map (fn (x) `(set! (js:this ,x.name) ,x)) fields)
+                    (js:this))
+                (new class ,@fields))))
+     class))
+
+(define-macro (define-class name fields)
+  `(define ,name (make-class ,fields)))

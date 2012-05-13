@@ -116,6 +116,8 @@ bootstrap(baseNS, {
     "regex?"      : (x) -> x instanceof RegExp
     "fn?"         : (x) -> typeof x == 'function'
 
+    "array-like?" : (x) -> x instanceof Object && 'length' in x
+
     "true?"       : (x) -> x == true
     "false?"      : (x) -> x == false
     "zero?"       : (x) -> x == 0
@@ -139,10 +141,10 @@ bootstrap(baseNS, {
 
     "empty?"      : isEmpty
     "cons"        : cons
-    "first"       : first
     "rest"        : rest
     "for-each"    : forEach
     "map"         : map
+    "filter"      : filter
     "size"        : size
     "concat"      : concat
     "partition"   : partition
@@ -152,8 +154,24 @@ bootstrap(baseNS, {
     "take-while"  : takeWhile
     "drop-while"  : dropWhile
     "apply"       : apply
+    "nth"         : nth
+
+    "first"       : first
+    "second"      : second
+    "third"       : third
+    "fourth"      : fourth
+    "fifth"       : fifth
+    "sixth"       : sixth
+    "seventh"     : seventh
+    "eighth"      : eighth
+    "ninth"       : ninth
+
+    "get"         : get
+    "put!"        : put
+    "contains?"   : contains
 
     "represent"   : represent
+    "represent*"  : representArray
     "pr"          : pr
     "prn"         : prn
     "print"       : print

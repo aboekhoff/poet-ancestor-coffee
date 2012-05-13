@@ -7,15 +7,19 @@ p = (x) -> console.log(util.inspect(x, false, null))
 t = true
 f = false
 
+load = (filename) ->
+  src = fs.readFileSync(filename, 'utf8')
+  rdr = Reader.create(src, filename)
+  loadToplevel(rdr)
+
+$LOAD(load)
+
 main = () ->
   $PACKAGE(Package.createStandardPackage("user"))
+  $LOAD()
   i = 2
   while i < process.argv.length
-    file = process.argv[i]
-    console.log('loading ' + file)
-    src = fs.readFileSync(process.argv[i], 'utf8')
-    rdr = Reader.create(src, file)
-    loadToplevel(rdr)
+    load(process.argv[i])
     i++
 
 main()

@@ -1,0 +1,52 @@
+Javascript lisp dialect with DNA from
+Clojure, Common Lisp, Scheme, Shen, and Haskell
+(in no particular order).
+
+The naming conventions mostly resemble Scheme with a
+combination of syntax choices from Shen and Clojure.
+
+The control structures (block, loop, return-from) and
+imperative style 
+(with regards to iteration and non-local exits) 
+are from Common Lisp
+
+(for [x y] :in [1 2 3]
+ for [a b] :in [2 3 4])
+
+Currently it has interpreter style semantics with 
+respect to compilation. That is the top-level view of
+a program is a series of side-effecting expressions
+(presumably defining functions and macros)
+
+This is rather extravagant for delivery to the client,
+since not only does client-side compilation involve some
+non-zero overhead, it also loads a lot of code that will
+probably only be invoked during compilation.
+
+A simple approach would be to designate a main function,
+then compile the application as normal, and simply keep a log of
+all compiled forms (naturally excluding macro definitions) and
+then that tree can be optimized aggressively for delivery to
+the client. 
+
+--
+
+before rewriting in itself want to move as many functions
+as possible into the coffeescript codebase and out of core.
+we want core to start by defining macros, 
+and then have a series of (define-once ...) forms
+
+that way we can load core from the coffeescript version
+and just get the macros, and when we compile it to a standalone
+application, we'll get the definitions 
+(the macros will have disappeared).
+Then we can reload core in the standalone application and
+get the macros. 
+(and we should be able to repeat that process infinitely)
+
+--
+
+it's time to get this show on the road.
+first stop is compile-file and cond-expand
+so we can build and test the self-hosted version incrementally
+

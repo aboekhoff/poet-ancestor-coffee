@@ -182,9 +182,9 @@ SpecialForm.define({
 
     "set!" : (e, x) ->
         List.create(
-            baseSymbol("set!"),
-            expand(e, x.head),
-            expand(e, x.tail.head)
+           baseSymbol("set!"),
+           expand(e, x.head),
+           expand(e, x.tail.head)
         )
 
     "throw!" : (e, x) ->
@@ -230,39 +230,32 @@ SpecialForm.define({
             expand(e, x.tail.head)
         )
 
-    "let" : (e, x) ->
-        vals = []
-        vars = []
+    "let*" : (e, x) ->
+      res = []
 
-        pairs = toArray(x.head)
+      forEach(
+        (pair) ->
+          expr = expand(e, second(pair))
+          e    = e.extend()
+          sym  = e.bindLocal(first(pair))
+          res.push([sym, expr])
+          null
+        x.head)
 
-        for pair in pairs
-            [_, expr] = toArray(pair)
-            vals.push(expand(e, expr))
+      e    = e.extend()
+      body = expandBody(e, x.tail)
 
-        e =  e.extend()
+      fin = List.create(
+        baseSymbol("let*"),
+        res,
+        expandBody(e, x.tail)
+      )
 
-        for pair in pairs
-            [name, _] = toArray(pair)
-            vars.push(e.bindLocal(name))
+      fin
 
-        bindings = []
-        for v, i in vars
-            bindings.push(List.fromArray([v, vals[i]]))
-
-        List.create(
-            baseSymbol("let"),
-            List.fromArray(bindings),
-            expandBody(e, x.tail)
-        )
-
-    "letrec" : (e, x) ->
-      defs = toArray(x.head)
-      for x, i in defs
-        defs[i] = toArray(x)
-
+    "letrec*" : (e, x) ->
       body = toArray(x.tail)
-      expandLetRec(e, defs, body)
+      expandLetRec(e, x.head, x.tail)
 
     "js*" : (e, x) ->
         List.create(
@@ -304,6 +297,9 @@ SpecialForm.define({
     "new" : (e, x) ->
       ex = (x) -> expand(e, x)
       cons(baseSymbol("new"), map(ex, x))
+
+    "throw" : (e, x) ->
+      List.create(baseSymbol("throw"), expand(e, x.head))
 })
 
 # expander helpers
@@ -320,7 +316,12 @@ macroexpand1 = (e, x) ->
 
 macroexpand = (e, x) ->
     y = macroexpand1(e, x)
-    if x == y then y else macroexpand(e, y)
+    loop
+      if x == y
+        return y
+      else
+        x = y
+        y = macroexpand(e, x)
 
 expand = (e, x) ->
     x = macroexpand(e, x)
@@ -422,7 +423,6 @@ expandCall = (e, ls) ->
     method = head.name.substring(1)
     _ls    = List.create(baseSymbol("."), ls.tail.head, method)
     _ls    = cons(_ls, ls.tail.tail)
-    prn(_ls)
     expand(e, _ls)
   else
     ex = (x) -> expand(e, x)
@@ -471,23 +471,25 @@ expandBody = (e, xs) ->
           cons(baseSymbol("do"), List.fromArray(rem))
 
 expandLetRec = (e, defs, body) ->
+  defs = toArray(defs)
+  body = toArray(body)
   e = e.extend()
   names    = []
   exprs    = []
   bindings = []
 
-  for [name, _] in defs
-    names.push(e.bindLocal(name))
+  for pair in defs
+    names.push(e.bindLocal(first(pair)))
 
-  for [_, expr] in defs
-    exprs.push(expand(e, expr))
+  for pair in defs
+    exprs.push(expand(e, second(pair)))
 
   for x, i in names
-    bindings.push(List.create(x, exprs[i]))
+    bindings.push([x, exprs[i]])
 
   res = List.create(
-    baseSymbol("letrec"),
-    List.fromArray(bindings)
+    baseSymbol("letrec*"),
+    bindings,
     expandBody(e, body)
   )
 

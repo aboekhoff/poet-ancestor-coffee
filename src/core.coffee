@@ -14,6 +14,7 @@ class Var
       else
         return RT[key] = arguments[0]
 
+$LOAD            = Var('load')
 $RUNTIME         = Var('*runtime*')
 $OUT             = Var('*out*')
 $PACKAGE         = Var('*package*')
@@ -54,19 +55,25 @@ class Symbol
       sym
 
   @swapTag:   (sym, tag) ->
-    if (!sym.ns && sym.tags.head == tag)
+    if sym.ns
+      sym
+    else if (sym.tags.head == tag)
       new Symbol(sym.name, null, sym.tags.tail)
     else
       new Symbol(sym.name, null, cons(tag, sym.tags))
 
   @removeTag: (sym, tag) ->
-    if (!sym.ns && sym.tags.head == tag)
+    if sym.ns
+      sym
+    else if sym.tags.head == tag
       new Symbol(sym.name, null, sym.tags.tail)
     else
       sym
 
   @ensureTag: (sym, tag) ->
-    if (!sym.ns && sym.tags.head == tag)
+    if sym.ns
+      sym
+    else if sym.tags.head == tag
       sym
     else
       new Symbol(sym.name, null, cons(tag, sym.tags))
@@ -576,6 +583,51 @@ map.extend(
 
 )
 
+filter = Method(name: 'filter', index: 1)
+filter.extend(
+  null
+  (_, _) -> null
+
+  String
+  (f, s) ->
+    buf = []
+    i   = 0
+    for c in s
+      if f(c)
+        buf[i] = c
+        i++
+    buf.join("")
+
+  Array
+  (f, xs) ->
+    ys = []
+    i  = 0
+    for x in xs
+      if f(x)
+        ys[i] = x
+        i++
+    ys
+
+  List
+  (f, xs) ->
+    ys = []
+    i  = 0
+
+    while xs.size > 0
+      x = xs.head
+      if f(x)
+        ys[i] = xs.head
+        i++
+      xs = xs.tail
+
+    List.fromArray(ys)
+
+  Method.DEFAULT
+  (f, xs) ->
+    toType(xs).fromArray(filter(f, toArray(xs)))
+
+)
+
 # still debating whether or not
 # to extend these to Objects
 
@@ -639,7 +691,7 @@ drop.extend(
   (n, s) -> s.substring(n)
 
   Array
-  (n, xs) -> x.slice(n)
+  (n, xs) -> xs.slice(n)
 
   List
   (n, xs) -> List.fromArray(List.toArray(xs).slice(n))
@@ -670,6 +722,38 @@ dropWhile.extend(
         return xs.slice(i)
     return []
 )
+
+nth = Method({name: 'nth', index: 1})
+nth.extend(
+  Method.DEFAULT
+  (n, xs) -> toArray(xs)[n-1]
+
+  String
+  (n, s) -> s[n-1]
+
+  Array
+  (n, xs) -> xs[n-1]
+
+  List
+  (n, xs) ->
+    loop
+      if xs.size == 0
+        return null
+      else if n <= 1
+        return xs.head
+      else
+        xs = xs.tail
+        n = n - 1
+)
+
+second  = (xs) -> nth(2, xs)
+third   = (xs) -> nth(3, xs)
+fourth  = (xs) -> nth(4, xs)
+fifth   = (xs) -> nth(5, xs)
+sixth   = (xs) -> nth(6, xs)
+seventh = (xs) -> nth(7, xs)
+eighth  = (xs) -> nth(8, xs)
+ninth   = (xs) -> nth(9, xs)
 
 get = Method(name: 'get')
 get.extend(

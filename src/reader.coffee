@@ -130,11 +130,11 @@ class Reader
       else
         new Symbol(s)
 
-    @isBinary: (s) -> /(\+|-)?0[bB](0|1)+$/.test(s)
-    @isOctal:  (s) -> /(\+|-)?0[0-7]+$/.test(s)
-    @isInt:    (s) -> /(\+|-)?(0|([1-9][0-9]*))$/.test(s)
-    @isHex:    (s) -> /(\+|-)?0[xX][0-9a-fA-F]+$/.test(s)
-    @isFloat:  (s) -> /(\+|-)?(0|([1-9][0-9]*))\.[0-9]+$/.test(s)
+    @isBinary: (s) -> /^(\+|-)?0[bB](0|1)+$/.test(s)
+    @isOctal:  (s) -> /^(\+|-)?0[0-7]+$/.test(s)
+    @isInt:    (s) -> /^(\+|-)?(0|([1-9][0-9]*))$/.test(s)
+    @isHex:    (s) -> /^(\+|-)?0[xX][0-9a-fA-F]+$/.test(s)
+    @isFloat:  (s) -> /^(\+|-)?(0|([1-9][0-9]*))\.[0-9]+$/.test(s)
 
     @escapeMap: {
         'n'  : '\n'

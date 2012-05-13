@@ -52,6 +52,6 @@ task 'build', 'build gandalf', (options) ->
     paste(
       targets: browserTargets
       outfile: 'gandalf-browser'
-      outdir:  'browser'
+      outdir:  'public'
       shebang: false
     )

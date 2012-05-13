@@ -1,0 +1,75 @@
+(load "core.gandalf")
+
+(define R "R")
+(define B "B")
+(define E #nil)
+
+(define (tree/get t k ?)
+  (if (nil? t)
+      ?
+      (let (([_ a [k* v] b] t))
+        (cond            
+         ((< k k*) (tree/get a k ?))
+         ((> k k*) (tree/get b k ?))
+         (#t v)))))
+
+(define (tree/put t k v)
+  (let (([_ a y b] (tree/put* t k v)))
+    [B a y b]))
+
+(define (tree/put* t k v)
+  (match t
+    (,E [R E [k v] E])
+    ([color a [k* v*] b]
+     (cond
+      ((< k k*) (tree/balance [color (tree/put* a k v) [k* v*] b]))
+      ((> k k*) (tree/balance [color a [k* v*] (tree/put* b k v)]))
+      (#t       [color a [k v] b])))))
+
+(define (tree/balance t)
+  (match t
+    ([,B [,R [,R a x b] y c] z d] [R [B a x b] y [B c z d]])
+    ([,B [,R a x [,R b y c]] z d] [R [B a x b] y [B c z d]])
+    ([,B a x [,R [,R b y c] z d]] [R [B a x b] y [B c z d]])
+    ([,B a x [,R b y [,R c z d]]] [R [B a x b] y [B c z d]])
+    (_ t)))
+
+(define (sequence->tree seq)
+  (foldl (fn (t [k v]) (tree/put t k v)) #nil seq))
+
+(define-class <Set> (tree))
+(define-class <Map> (tree))
+
+(comment
+   (Associative
+   (get (s k ?) (new <set> (tree/get s.tree k ?)))
+   (put (s k)   (new <set> (tree/put s.tree k #nil)))
+   (del (s k)   (new <set> (tree/del s.tree k)))))
+
+(comment
+ (Associative
+   (get (s k ?) (new <map> (tree/get s.tree k ?)))
+   (put (s k v) (new <map> (tree/put s.tree k v)))
+   (del (s k)   (new <map> (tree/del s.tree k)))))
+
+
+(define util (require "util"))
+(define (p x) (println (.inspect util x #f #nil)))
+
+(define tree
+  (sequence->tree
+   [[1 "a"]
+    [2 "b"]
+    [3 "c"]
+    [4 "d"]
+    [5 "e"]]))
+
+(prn tree)
+(prn (tree/get tree 1 #f))
+(prn (tree/get tree 2 #f))
+(prn (tree/get tree 3 #f))
+(prn (tree/get tree 4 #f))
+(prn (tree/get tree 5 #f))
+
+
+

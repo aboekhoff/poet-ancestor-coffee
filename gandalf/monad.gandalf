@@ -1,0 +1,73 @@
+(load "core.gandalf")
+
+(define (left-arrow? x)
+  (and (symbol? x) (eq? x.name "<-")))
+
+(define (right-arrow? x)
+  (and (symbol? x) (eq? x.name "->")))
+
+(define (parse-comprehension m xs)
+  (cond
+   ((left-arrow? (second xs))
+    `((. ,m "bind") ,(third xs)
+      (fn (,(first xs))
+          ,(parse-comprehension m (drop 3 xs)))))
+
+   ((right-arrow? (first xs))
+    `((. ,m "unit") ,(second xs)))
+   
+   ((empty? (rest xs))
+    (first xs))
+   
+   (#t
+    `((. ,m "bind")
+      ,(first xs)
+      (fn* (_) ,(parse-comprehension m (rest xs)))))))
+
+(define identity (js.Object))
+(set! identity.bind (fn (m f) (f m)))
+(set! identity.unit (fn (x) x))
+
+(define seq (js.Object))
+(set! seq.bind (fn (m f) (apply concat (map f m))))
+(set! seq.unit (fn (x) [x]))
+
+(define cont (js.Object))
+(set! cont.bind
+      (fn (m f)
+          (fn (k)
+              (m (fn (x)
+                     ((f x) k))))))
+
+(set! cont.unit (fn (x) (fn (k) (k x))))
+
+(define-macro (begin monad-expr : body)
+  `(let ((monad ,monad-expr))
+     ,(parse-comprehension 'monad body)))
+
+(prn (parse-comprehension
+      'seq
+      '(x <- [1 2 3]
+        y <- [2 3 4]
+          -> [x y (* x y)])))
+
+(begin identity
+  x <- 42
+  y <- 21
+  z <- 43
+    -> (prn (* x y z)))
+
+(prn
+ (begin seq
+   x <- [1 2 3 4 5 6 7]
+   y <- [2 3 4]     
+     -> [x y (* x y)]))
+
+(define (id x) x)
+
+(define wtf
+  (begin cont
+    a <- (fn (x))
+    b <- ))
+
+(prn (wtf id))

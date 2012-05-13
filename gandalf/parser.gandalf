@@ -1,0 +1,312 @@
+(load "core.gandalf")
+
+;; parser :: stream -> [#t data stream] | [#f data]
+
+(define (arrow? x)
+  (and (symbol? x) (eq? x.name "<-")))
+
+(define (fail-when? x)
+  (and (symbol? x) (eq? x.name ":fail-when")))
+
+(define (parse-comprehension xs)
+  (cond
+   ((arrow? (nth 2 xs))
+    `(>>= ,(nth 3 xs)
+          (fn (,(nth 1 xs))
+              ,(parse-comprehension (drop 3 xs)))))
+   
+   ((fail-when? (first xs))
+    `(if ,(nth xs 2)
+         :fail
+         ,(parse-comprehension (drop 2 xs))))
+   
+   ((empty? (rest xs))
+    (first xs))
+   
+   (#t
+    `(>> ,(nth 1 xs)
+         ,(parse-comprehension (rest xs))))))
+
+(define-macro (with-parser : body)
+  (parse-comprehension body))
+
+;; 
+(define-macro (define-parser name : body)
+  (if (list? name)
+      (let ((name (first name))
+            (arglist (rest name)))
+        `(define (,name ,@arglist)
+           (let ((func #nil))
+             (fn (stream)
+                 (unless func (set! func (with-parser ,@body)))
+                 (func stream)))))
+      `(define (,name stream)
+         ((with-parser ,@body) stream))))
+
+(define (run-parser parser stream)
+  (parser stream))
+
+(define (:succeed data)
+  (fn (stream) [#t data stream]))
+
+(define (:fail stream) [#f #nil stream])
+
+(define (:get-stream stream)
+  (:succeed stream))
+
+(define (:fail-with data)
+  (fn (stream) [#f data stream]))
+
+(define (>>= p c)
+  (fn (s)
+      (let ((r (p s)))
+        (print "in >>= ")
+        (prn r)
+        (if r.0 ((c r.1) r.2) r))))
+
+(define (>> p1 p2)
+  (fn (s)
+      (let ((r (p s)))
+        (if r.0 (p2 r.2) r))))
+
+(define (:peek stream)
+   (if (empty? stream)
+       [#f "eof"]
+       [#t (first stream) stream]))
+
+ (define (:token stream)
+   (if (empty? stream)
+       [#f "eof"]
+       [#t (first stream) (rest stream)]))
+
+(define-parser (:? predicate)
+  a <- :peek
+  (if (predicate a)
+      :token
+      :fail))
+
+(define-parser (:re regex)
+  (:? (fn (x) (.test regex x))))
+
+(define-parser (:eq? x)
+  a <- :peek
+  (if (eq? a x)
+      :token
+      :fail))
+
+(define-parser (:symbol-eq? x)
+  a <- :peek
+  (if (and (symbol? a) (eq? a.name x.name) (eq? a.ns x.ns))
+      :token
+      :fail))
+
+(define (:zero-or-more parser)
+  (fn (stream)
+    (let ((acc []))
+      (loop
+       (let ((result (run-parser parser stream)))
+         (if result.0
+             (do (.push acc result.1)
+                 (set! stream result.2))
+             (return [#t acc stream])))))))
+
+(define-parser (:one-or-more parser)
+  x  <- parser
+  xs <- (:zero-or-more parser)
+  (:succeed (cons x xs)))
+
+(define-parser (:sequence parsers)
+  (if (empty? parsers)
+      (:succeed '())
+      (with-parser
+       x  <- (first parsers)
+       xs <- (:sequence (rest parsers))
+       (:succeed (cons x xs)))))
+
+(define (:or1 parser1 parser2)
+  (fn (stream)
+      (let ((result (parser1 stream)))
+        (if (result.0)
+            result.0
+            (parser2 stream)))))
+
+(define-parser (:or parsers)
+  (if (empty? parsers)
+      :fail
+      (:or1 (first parsers)
+            (:or (rest parsers)))))
+
+(define (:lookahead parser)
+  (fn (stream)
+      (let ((result (parser stream)))
+        (if result.0
+            [#t result.1 stream]
+            result))))
+
+; a few aliases for convenience
+(define-parser (:~ p)    (:lookahead p))
+(define-parser (:* p)    (:zero-or-more p))
+(define-parser (:+ p)    (:one-or-more p))
+(define-parser (:: : xs) (:sequence xs))
+(define-parser (:/ : xs) (:or xs))
+
+(define :letter  (:re (js.RegExp "[a-zA-Z]")))
+(define :digit   (:re (js.RegExp "[0-9]")))
+(define :symbol  (:? symbol?))
+(define :list    (:? list?))
+(define :array   (:? array?))
+(define :literal (:? (fn (x) (or (boolean? x)
+                                 (number? x)
+                                 (string? x)
+                                 (nil? x)
+                                 (void? x)))))
+
+(define-parser (:^ parser func)
+  result <- parser
+  (succeed (func result)))
+
+(define-parser (:sub-parser outer inner)
+  stream <- outer
+  (let ((result (inner stream)))
+    (if (and result.0 (empty? result.2))
+        (:succeed result.1)
+        :fail)))
+
+(define-parser (:list-of parser)
+  (:sub-parser :list parser))
+
+(define-parser (:array-of parser)
+  (:sub-parser :array parser))
+
+(prn (run-parser (:one-or-more :symbol) '(a b c)))
+(prn (run-parser (:list-of (:one-or-more :symbol)) '((a b c 42))))
+(prn (run-parser (:list-of (:one-or-more :list)) '((() () ()))))
+
+(define-parser :binding      (:list-of (:: :symbol :token)))
+(define-parser :binding-list (:list-of (:* :binding)))
+
+(define-parser :let
+  _        <- (:symbol-eq? 'let)
+  bindings <- :binding-list
+  body     <- (:* :token)
+  (:succeed ["LET" bindings body]))
+
+(prn ((:symbol-eq? 'let) '(let)))
+
+(prn (:let '(let ((x 42)) (prn x) (* x x))))
+
+(comment
+
+ (define (>>= parser cont)
+   (fn (stream)
+       (let ((result (parser stream)))
+         (if result.0
+             ((cont result.1) result.2)
+             result))))
+
+ (define (:get-stream stream)
+   [#t stream stream])
+
+ (define (:re regex)
+   (:? (fn (x) (.test regex x))))
+
+ (define (lift f)
+   (fn (stream) (f stream)))
+
+ (define :number (:? number?))
+ (define :letter (:re (js.RegExp "^[a-zA-Z]$")))
+ (define :lower  (:re (js.RegExp "^[a-z]$")))
+ (define :upper  (:re (js.RegExp "^[A-Z]$")))
+ (define :digit  (:re (js.RegExp "^[0-9]$")))
+
+ (define (:* parser)
+   (fn (stream)
+       (let ((acc []))        
+         (loop
+          (let ((result (parser stream)))  
+            (if result.0
+                (do (.push acc result.1)
+                    (set! stream result.2))
+                (return [#t acc stream])))))))
+
+ (define (:+ parser)
+   (fn (stream)
+       (run-parser
+        (>>= parser      (fn (x) 
+                             (>>= (:* parser) (fn (xs)
+                                                  (:succeed (cons x xs))))))
+        stream)))
+
+ (define (:: : parsers)  
+   (fn (stream)
+       (if (empty? parsers)
+           [#t '() stream]
+           (run-parser
+            (>>= (first parsers) (fn (x)
+                                     (>>= (apply :: (rest parsers)) (fn (xs)
+                                                                        (:succeed (cons x xs))))))
+            stream))))
+
+ (define (:/ : parsers)
+   (fn (stream)
+       (if (empty? parsers)
+           [#f]
+           (let ((result ((first parsers) stream)))
+             (if result.0
+                 result
+                 ((apply :/ (rest parsers)) stream))))))
+
+ (define (:! parser)
+   (fn (stream)
+       (let ((result (parser stream)))
+         (if result.0
+             [#f ["negated" parser]]
+             [#t result.1 stream]))))
+
+ (define (:~ parser)
+   (fn (stream)
+       (let ((result (parser stream)))
+         (if result.0
+             [#t result.1 stream]
+             result))))
+
+ (define *macros* (new Map))
+ (define :macro-char (:? (fn (x) (contains? *macros* x))))
+ (define :macro (>>= (:~ :macro-char) (fn (c) (get *macros* c))))
+
+ ;; let's try making a parser macros with combinators
+
+ (define :symbol (:? symbol?))
+ (define :list (:? list?))
+ (define :array (:? array?))
+
+ (define (:list-of parser)
+   (fn (stream)
+       (run-parser
+        (>>= :list (:succeed 42))
+        stream)))
+
+ (prn (run-parser :number [1 2 3 4 5 "foo" "bar"]))
+ (prn (run-parser :number ["foo" "bar" 1 2 3 4 5]))
+ (prn (run-parser (:* :number) ["foo" "bar" 1 2 3 4 5]))
+ (prn (run-parser (:* :number) [1 2 3 4 "foo" "bar"]))
+ (prn (run-parser (:+ :number) ["foo" "bar" 1 2 3 4 5]))
+ (prn (run-parser (:+ :number) [1 2 3 4 "foo" "bar"]))
+ (prn (run-parser (:: :number :number) [1 2 3 4]))
+ (prn (run-parser (:: :number :letter) [1 2 3 4]))
+ (prn (run-parser (:: :number :letter) [1 "f" 3 4]))
+ (prn (run-parser (:+ (:/ :number :letter)) [1 "a" 2 "b" 3 "c" #nil]))
+
+ (put! *macros* "a"
+       (fn (stream)
+           (println "gimme an A!!!!!")
+           [#t "AWESOMENESS" stream]))
+
+ (prn (run-parser :macro "x"))
+ (prn (run-parser :macro "a"))
+ (prn (run-parser (:~ :token) ""))
+
+ (prn (run-parser :list '((a b c d))))
+
+ (prn (run-parser (>> token (:succeed 42)) "foo"))
+)

@@ -1,0 +1,33 @@
+(load "core.gandalf")
+
+(define canvas #nil)
+(define ctx #nil)
+
+(define +width+ 160)
+(define +height+ 120)
+(define +scale+ 2)
+
+(define (center canvas)
+  (let ((w js.innerWidth)
+        (h js.innerHeight))
+    (set! canvas.style.left (- (/ w 2) (/ canvas.width 2)))
+    (set! canvas.style.top  (- (/ h 2) (/ canvas.height 2)))))
+
+(define (init)
+  (set! canvas (.createElement js.document "canvas"))
+  (set! canvas.width (* +scale+ +width+))
+  (set! canvas.height (* +scale+ +height+))
+  (set! canvas.style.borderStyle "solid black 1 px")
+  (set! canvas.style.zIndex "1000")
+  (set! canvas.style.position "absolute")
+  (set! canvas.style.left "")
+  (center canvas)
+  (.appendChild js.document.body canvas))
+
+(define (draw)
+  (set! ctx (.getContext canvas "2d"))
+  (set! ctx.fillStyle "#C9C9C9")
+  (.fillRect ctx 0 0 canvas.width canvas.height))
+
+(init)
+(draw)

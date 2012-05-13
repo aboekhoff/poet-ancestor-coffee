@@ -47,12 +47,8 @@ normalizeCall = (x) ->
   ['CALL', normalize(x[0]), _normalize(x.slice(1))]
 
 normalizeBindings = (xs) ->
-  xs = toArray(xs)
-  ys = []
-  for x in xs
-    x = toArray(x)
-    ys.push [normalize(x[0]), normalize(x[1])]
-  ys
+  for [x, y] in xs
+    [normalize(x), normalize(y)]
 
 normalizeList = (x) ->
   if isSpecialFormSymbol(x[0])
@@ -61,9 +57,9 @@ normalizeList = (x) ->
         ['DO', _normalize(x.slice(1))]
       when 'if'
         ['IF', normalize(x[1]), normalize(x[2]), normalize(x[3])]
-      when 'let'
+      when 'let*'
         ['LET', normalizeBindings(x[1]), normalize(x[2])]
-      when 'letrec'
+      when 'letrec*'
         ['LETREC', normalizeBindings(x[1]), normalize(x[2])]
       when 'set!'
         ['SET!', normalize(x[1]), normalize(x[2])]
@@ -233,19 +229,15 @@ class Compiler
             @compile(xs[i], t)
 
     compileLet: (pairs, body, tracer) ->
-        _compiler = @extendEnv()
-        _pairs = []
+        compiler = this
 
-        # run through the bindings and allocate locals
         for [v, x] in pairs
-            _v = _compiler.bindLocal(v)
-            _pairs.push([_v, x])
+          _compiler = compiler.extendEnv()
+          _v = _compiler.bindLocal(v)
+          compiler.compile(x, Compiler.tracerFor(_v))
+          compiler = _compiler
 
-        # run through the expressions and compile
-        for [_v, x] in _pairs
-            @compile(x, Compiler.tracerFor(_v))
-
-        _compiler.compile(body, tracer)
+        compiler.compile(body, tracer)
 
     compileLetRec: (pairs, body, tracer) ->
         _compiler = @extendEnv()

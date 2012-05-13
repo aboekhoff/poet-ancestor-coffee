@@ -1,0 +1,79 @@
+(define-class <vlist> [block offset])
+(define-class <vlist-block> [block offset size last-used array])
+
+(define (vlist-car vlist)
+  (if (nil? vlist.block)
+      #nil
+      (. vlist.block.array vlist.offset)))
+
+(define (vlist-cdr vlist)
+  (cond
+   ((nil? vlist.block) #nil)
+        
+   ((> vlist.offset 0)
+    (new <vlist> vlist.block (- vlist.offset 1)))
+        
+   ((nil? vlist.block.block)
+    #nil)
+        
+   (#t
+    (new <vlist> vlist.block.block vlist.block.offset))))
+
+(define (vlist-cons x vlist)
+  (if (nil? vlist.block)
+      (new <vlist>
+           (new <vlist-block>
+                #nil
+                #nil
+                1
+                0
+                [x])
+           0)
+      (let ((offset* (+ vlist.offset 1)))
+        (if (eq? vlist.offset vlist.block.last-used)
+            (if (< offset* vlist.block.size)
+                (do (set! (. vlist.block.array offset*) x)
+                    (set! vlist.block.last-used offset*)
+                    (new <vlist>
+                         vlist.block
+                         offset*))
+                (new <vlist>
+                     (new <vlist-block>
+                          vlist.block
+                          vlist.offset
+                          (* vlist.block.size 2)
+                          0
+                          [x])
+                     0))
+            (new <vlist>
+                 (new <vlist-block>
+                      vlist.block
+                      vlist.offset
+                      1
+                      0
+                      [x])
+                 0)))))
+
+(define (array->vlist array)
+  (let ((i  (. array "length"))
+        (ls (new <vlist> #nil #nil)))
+    (loop     
+     (set! i (- i 1))
+     (when (< i 0) (return ls))
+     (set! ls (vlist-cons (. array i) ls)))))
+
+(.extend to-array
+  <vlist>
+  (fn (vlist)
+      (let ((arr []))
+        (loop
+         (when (nil? vlist) (return arr))
+         (.push arr (vlist-car vlist))
+         (set! vlist (vlist-cdr vlist))))))
+
+(.extend represent
+   <vlist>
+   (fn (vlist port mode)
+       (port "(")
+       (represent* (to-array vlist) port mode)
+       (port ")")))
